@@ -85,13 +85,18 @@ export async function POST(request: NextRequest) {
 
   const { description } = parsedBody;
 
-  const { result, error } = await generatePlantName(description);
+  try {
+    const { result, error } = await generatePlantName(description);
 
-  if (error) {
-    console.error("PlantNamer error", error);
+    if (error) {
+      console.error("PlantNamer error", error);
+    }
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("PlantNamer critical error", error);
+    return NextResponse.json(FALLBACK_RESULT);
   }
-
-  return NextResponse.json(result);
 }
 
 function applyRateLimit(request: NextRequest) {
