@@ -18,6 +18,9 @@ const config: Config = {
       },
       boxShadow: {
         card: "0 12px 30px -12px rgba(15, 23, 42, 0.25)"
+      },
+      animation: {
+        "spin-slow": "spin 1.4s linear infinite"
       }
     }
   },
