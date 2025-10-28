@@ -85,16 +85,13 @@ export async function POST(request: NextRequest) {
 
   const { description } = parsedBody;
 
-  try {
-    const result = await generatePlantName(description);
-    return NextResponse.json(result);
-  } catch (error) {
+  const { result, error } = await generatePlantName(description);
+
+  if (error) {
     console.error("PlantNamer error", error);
-    return NextResponse.json(
-      { error: "Something went wrong" },
-      { status: 500 }
-    );
   }
+
+  return NextResponse.json(result);
 }
 
 function applyRateLimit(request: NextRequest) {
@@ -114,8 +111,11 @@ function applyRateLimit(request: NextRequest) {
   return null;
 }
 
-async function generatePlantName(description: string): Promise<ParsedResult> {
+async function generatePlantName(
+  description: string
+): Promise<{ result: ParsedResult; error: unknown | null }> {
   const client = getOpenAIClient();
+  let lastError: unknown = null;
 
   const attempts = [
     USER_PROMPT_TEMPLATE(description),
@@ -125,15 +125,19 @@ async function generatePlantName(description: string): Promise<ParsedResult> {
   ];
 
   for (const prompt of attempts) {
-    const outputText = await generateModelOutput(client, prompt);
-    const parsed = parseModelOutput(outputText);
+    try {
+      const outputText = await generateModelOutput(client, prompt);
+      const parsed = parseModelOutput(outputText);
 
-    if (parsed) {
-      return parsed;
+      if (parsed) {
+        return { result: parsed, error: null };
+      }
+    } catch (error) {
+      lastError = error;
     }
   }
 
-  return FALLBACK_RESULT;
+  return { result: FALLBACK_RESULT, error: lastError };
 }
 
 function getOpenAIClient() {
