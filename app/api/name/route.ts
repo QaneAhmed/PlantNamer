@@ -43,6 +43,8 @@ const FALLBACK_RESULT = {
   why: "Cheerful, punny, and easy to like."
 };
 
+const FALLBACK_CHAT_MODEL = "gpt-4o-mini";
+
 let cachedOpenAIClient: OpenAI | null = null;
 
 type ParsedResult = {
@@ -123,22 +125,7 @@ async function generatePlantName(description: string): Promise<ParsedResult> {
   ];
 
   for (const prompt of attempts) {
-    const response = await (client as unknown as {
-      responses: {
-        create: (params: {
-          model: string;
-          input: Array<{ role: "system" | "user"; content: string }>;
-        }) => Promise<{ output_text: string | null | undefined }>;
-      };
-    }).responses.create({
-      model: "gpt-5-mini",
-      input: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: prompt }
-      ]
-    });
-
-    const outputText = response.output_text;
+    const outputText = await generateModelOutput(client, prompt);
     const parsed = parseModelOutput(outputText);
 
     if (parsed) {
@@ -198,4 +185,65 @@ function parseModelOutput(output: string | null | undefined): ParsedResult | nul
   }
 
   return { name, why };
+}
+
+async function generateModelOutput(
+  client: OpenAI,
+  prompt: string
+): Promise<string | null | undefined> {
+  const maybeResponses = (client as unknown as {
+    responses?: {
+      create: (params: {
+        model: string;
+        input: Array<{ role: "system" | "user"; content: string }>;
+      }) => Promise<{ output_text: string | null | undefined }>;
+    };
+  }).responses;
+
+  if (maybeResponses && typeof maybeResponses.create === "function") {
+    const response = await maybeResponses.create({
+      model: "gpt-5-mini",
+      input: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: prompt }
+      ]
+    });
+
+    return response.output_text;
+  }
+
+  const chatCompletion = await client.chat.completions.create({
+    model: FALLBACK_CHAT_MODEL,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: prompt }
+    ]
+  });
+
+  const choice = chatCompletion.choices[0];
+  const content = choice?.message?.content;
+
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return (content as Array<unknown>)
+      .map((part) => {
+        if (typeof part === "string") {
+          return part;
+        }
+
+        if (typeof part === "object" && part && "text" in part) {
+          const maybeText = (part as { text?: unknown }).text;
+          return typeof maybeText === "string" ? maybeText : "";
+        }
+
+        return "";
+      })
+      .join("\n")
+      .trim();
+  }
+
+  return null;
 }
